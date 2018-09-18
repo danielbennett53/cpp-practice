@@ -30,3 +30,7 @@
 *.exe
 *.out
 *.app
+
+# Database files
+*.idx3-ubyte
+*.idx1-ubyte
