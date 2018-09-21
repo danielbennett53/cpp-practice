@@ -1,6 +1,7 @@
 #include <vector>
 #include <fstream>
 #include <iostream>
+#include <Eigen/Dense>
 
 #define TRAIN 1
 #define TEST 2
@@ -13,7 +14,9 @@ int32_t swap32(int32_t val)
          ((val >> 24) & 0x000000ff);
 }
 
-int read_image(int idx, uint8_t *image_out, int flags)
+
+int read_images(Eigen::Matrix<uint8_t, Eigen::Dynamic, Eigen::Dynamic>& image_out, Eigen::Matrix<uint8_t,
+  Eigen::Dynamic, 1>& label_out, int flags)
 {
   std::ifstream img_file, lbl_file;
 
@@ -35,9 +38,8 @@ int read_image(int idx, uint8_t *image_out, int flags)
   meta_img[1] = swap32(meta_img[1]);
   meta_lbl[0] = swap32(meta_lbl[0]);
   meta_lbl[1] = swap32(meta_lbl[1]);
-  std::cout << std::hex << meta_img[0] << "  " << meta_img[1] << std::endl;
-  std::cout << meta_lbl[0] << "  " << meta_lbl[1] << std::dec << std::endl;
 
+  // Check file validity
   if (meta_img[0] != 2051) {
     std::cerr << "Image file invalid!" << std::endl;
     return -1;
@@ -53,39 +55,55 @@ int read_image(int idx, uint8_t *image_out, int flags)
     return -1;
   }
 
-  if (idx >= meta_lbl[1]) {
-    std::cerr << "Index out of bounds! IDX = " << idx
-      << ", File size = " << meta_lbl[1] << std::endl;
-    return -1;
+  // // Resize outputs if necessary
+  if (meta_lbl[1] != label_out.rows())
+    label_out.resize(meta_lbl[1], 1);
+
+  if (meta_img[1] != image_out.rows())
+    image_out.resize(784, meta_img[1]);
+
+  // Set stream location
+  img_file.seekg(16);
+  lbl_file.seekg(8);
+
+  for (int i=0; i<meta_img[1]; ++i)
+  {
+    label_out(i) = lbl_file.get();
+    for (int j=0; j<784; ++j)
+    {
+      image_out(j, i) = (uint8_t)img_file.get();
+    }
   }
-
-  img_file.seekg(16 + idx*784, std::ios::beg);
-  lbl_file.seekg(8 + idx, std::ios::beg);
-
-  img_file.read((char *) image_out, 784);
-  char num;
-  lbl_file.read(&num, 1);
-  lbl_file.close();
-  img_file.close();
-  return num;
+  return 0;
 }
 
-int main(int argc, char **argv)
+template <typename Derived>
+void print_image(const Eigen::DenseBase<Derived>& im)
 {
-  int idx = 0;
-  if (argc > 1)
-    idx = argv[1][0];
-  uint8_t image[784];
-  int lbl;
-  lbl = read_image(idx, image, TEST);
-  for (int i = 0; i < 28; ++i)
+  for (int i=0; i<28; ++i)
   {
-    for (int j = 0; j < 28; ++j)
+    for (int j=0; j<28; ++j)
     {
-      printf("%3d ", image[i*28 + j]);
+      printf("%3d", im(i*28+j,0));
     }
     std::cout << std::endl;
   }
+}
 
-  std::cout << "number is: " << lbl << std::endl;
+int main()
+{
+  int idx;
+  Eigen::Matrix<uint8_t, Eigen::Dynamic, Eigen::Dynamic> images(1,1);
+  Eigen::Matrix<uint8_t, Eigen::Dynamic, 1> labels(1,1);
+
+  if (read_images(images, labels, TEST) < 0)
+    return -1;
+
+  std::cout << "Choose image index: ";
+  while(std::cin >> idx) {
+    auto test = images.col(idx);
+    print_image(test);
+    std::cout << "number is: " << +labels(idx,0) << std::endl << std::endl;
+    std::cout << "Choose image index: ";
+  }
 }
